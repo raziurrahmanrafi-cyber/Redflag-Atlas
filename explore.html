@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Search and filter published community scam-awareness reports.">
+<meta name="theme-color" content="#111827">
+<title>Explore reports · RedFlag Atlas</title>
+<link rel="stylesheet" href="./styles.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body data-page="explore">
+<a class="skip" href="#main">Skip to content</a>
+<header class="header"><div class="wrap header-inner"><a class="brand" href="./index.html"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0"/></svg></span><span>RedFlag <strong>Atlas</strong></span></a>
+<button type="button" class="menu-button" aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+<nav id="main-nav" aria-label="Main navigation"><a href="./index.html">Home</a><a href="./explore.html" aria-current="page">Explore reports</a><a href="./index.html#guidelines">Guidelines</a></nav>
+<a class="button primary header-report" href="./report.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0"/></svg> Report an incident</a></div></header>
+
+<main id="main">
+<section class="page-top"><div class="wrap"><p class="eyebrow"><span class="signal"></span> Community reports</p><h1>Explore reports</h1><p>Search first-hand accounts by keyword, country, category or platform.</p></div></section>
+<div class="wrap page-content">
+<form id="filters" class="card filters" role="search" action="./explore.html" method="get">
+<div class="search-field"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5"/><path d="m16 16 4 4"/></svg><input type="search" name="q" placeholder="Search reports by keyword, alias or handle" maxlength="120" aria-label="Search reports"></div>
+<div class="filter-row"><label>Country<select id="filter-country" name="country"><option value="">All countries</option></select></label>
+<label>Category<select id="filter-category" name="category"><option value="">All categories</option></select></label>
+<label>Platform<select id="filter-platform" name="platform"><option value="">All platforms</option></select></label>
+<button class="button quiet" id="clear-filters" type="button">Clear filters</button></div>
+</form>
+<p class="notice"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 22 1.7-.8C18 19 20 16 20 11V5l-8-3-8 3v6c0 5 2 8 6.3 10.2l1.7.8Z"/><path d="m9 12 2 2 4-4"/></svg> <span>These are community-submitted accounts. Moderation does not independently establish the allegations.</span></p>
+<div class="section-head feed-head"><h2>Published reports</h2><p id="results-count" role="status"></p></div>
+<div id="feed" class="cards"><p class="empty">Loading reports…</p></div>
+<noscript><p>Enable JavaScript to search and filter reports.</p></noscript>
+<div class="feed-cta"><div><h2>Had a suspicious interaction?</h2><p>Tell us what happened for private review.</p></div><a class="button primary" href="./report.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0"/></svg> Report an incident</a></div>
+</div>
+</main>
+<footer class="footer"><div class="wrap footer-inner"><div><a class="brand" href="./index.html"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0"/></svg></span><span>RedFlag <strong>Atlas</strong></span></a><p>One World. Shared Warnings. Safer Communities.</p></div>
+<nav aria-label="Footer navigation"><a href="./explore.html">Explore reports</a><a href="./index.html#guidelines">Guidelines</a><a href="./index.html#privacy">Privacy</a></nav></div></footer>
+</body>
+</html>
