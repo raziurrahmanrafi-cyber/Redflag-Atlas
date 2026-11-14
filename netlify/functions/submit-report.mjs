@@ -66,8 +66,8 @@ export default async function submitReport(request, context) {
 
   const files = form.getAll("evidence").filter((entry) =>
     typeof entry !== "string" && (entry.name || entry.size));
-  if (files.length > 3 || files.reduce((total, file) => total + file.size, 0) > maxEvidenceBytes) {
-    return respond(413, { error: "Choose up to 3 attachments, 4 MB or less combined." });
+  if (files.reduce((total, file) => total + file.size, 0) > maxEvidenceBytes) {
+    return respond(413, { error: "Attachments must be 4 MB or less combined." });
   }
 
   const attachments = {};
