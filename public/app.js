@@ -208,8 +208,7 @@ function reportForm(countries) {
     if (index === 1) {
       const files = [...evidence.files];
       let evidenceError = "";
-      if (files.length > 3) evidenceError = "Choose up to 3 attachments.";
-      else if (files.some((file) => !/\.(jpe?g|png|webp|pdf)$/i.test(file.name) || !file.size)) {
+      if (files.some((file) => !/\.(jpe?g|png|webp|pdf)$/i.test(file.name) || !file.size)) {
         evidenceError = "Choose non-empty JPG, PNG, WebP or PDF files.";
       } else if (files.reduce((total, file) => total + file.size, 0) > 4_000_000) {
         evidenceError = "Attachments must be 4 MB or less combined.";
