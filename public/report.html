@@ -43,8 +43,10 @@
 </div>
 <label>What happened?<textarea name="description" rows="6" minlength="20" maxlength="4000" required aria-describedby="description-hint"></textarea></label>
 <p class="field-hint" id="description-hint">20–4,000 characters. Leave out passwords, identity numbers and banking details.</p>
-<label>Evidence attachments <small>Optional</small><input name="evidence" type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" aria-describedby="evidence-hint"></label>
-<p class="field-hint" id="evidence-hint">Add up to 3 screenshots or PDFs (JPG, PNG, WebP or PDF), up to 4 MB combined. Only authorised admins review these files. Cover unrelated personal information before uploading.</p>
+<p class="contact-privacy" id="evidence-privacy"><strong>Your evidence stays private.</strong> Only authorised RedFlag Atlas admins can view your files to verify your report and decide whether to approve it for publication. Your original files will never be published.</p>
+<label>Evidence attachments <small>Optional</small><input name="evidence" type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" aria-describedby="evidence-privacy evidence-hint evidence-limits"></label>
+<p class="field-hint" id="evidence-hint"><strong>What to upload:</strong> Relevant chat screenshots (include dates where possible), a screenshot of the reported profile or a relevant photo of the person, a non-intimate photo of you together, or a payment receipt if money was involved.</p>
+<p class="field-hint" id="evidence-limits">Up to 3 JPG, PNG, WebP or PDF files, 4 MB combined. Hide unrelated personal details in upload copies. Keep your originals if you later seek legal advice.</p>
 </fieldset>
 <fieldset class="step" hidden><legend tabindex="-1">Confirm and submit</legend><p class="form-hint">Review the statements below before sending your report.</p>
 <label class="check"><input type="checkbox" name="accuracy" value="yes" required><span>I confirm that this report is accurate to the best of my knowledge.</span></label>
