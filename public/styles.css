@@ -158,3 +158,15 @@ label small { color: var(--muted); font-weight: 450; }
   .hero p:not(.eyebrow), .page-top p:not(.eyebrow) { font-size: 1rem; }
 }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } }
+
+.contact-privacy {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #a5b4fc;
+  border-inline-start: 4px solid #4338ca;
+  border-radius: 0.5rem;
+  background: #eef2ff;
+  color: #312e81;
+  font-weight: 650;
+}
+.contact-privacy strong { display: block; font-weight: 800; }
