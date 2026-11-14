@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { getStore } from "@netlify/blobs";
 import { strFromU8, unzipSync } from "fflate";
 
@@ -12,7 +12,7 @@ const headers = {
   "X-Content-Type-Options": "nosniff",
   "X-Robots-Tag": "noindex, nofollow",
   "Referrer-Policy": "no-referrer",
-  "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; sandbox allow-same-origin allow-downloads",
+  "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; sandbox allow-same-origin allow-downloads allow-forms",
 };
 const route = "/admin/reports";
 
@@ -28,7 +28,7 @@ function page(title, content, status = 200, extraHeaders = {}) {
 body{font:1rem/1.55 system-ui,sans-serif;color:#182335;background:#f3f5f9;margin:0}
 main{max-width:50rem;margin:auto;padding:1.25rem}
 section{background:white;border:1px solid #dde2ec;border-radius:.8rem;padding:1rem;margin:1rem 0}
-h1,h2,p{margin-top:0}a{color:#174591;overflow-wrap:anywhere}li{margin:.4rem 0}
+label{display:block;font-weight:700}input,button{font:inherit;padding:.65rem;border:1px solid #9ca7b8;border-radius:.35rem}input{box-sizing:border-box;width:100%;margin:.25rem 0 .85rem}button{background:#174591;color:white;cursor:pointer}h1,h2,p{margin-top:0}a{color:#174591;overflow-wrap:anywhere}li{margin:.4rem 0}
 dt{font-weight:700}dd{margin:0 0 .65rem;overflow-wrap:anywhere}
 .description{white-space:pre-wrap;overflow-wrap:anywhere}img{display:block;max-width:100%;max-height:26rem;margin:.6rem 0 1rem}
 </style><main><p>RedFlag Atlas · Private admin inbox</p><h1>${escape(title)}</h1>${content}</main></html>`,
@@ -60,14 +60,49 @@ export default async function adminReports(request, context) {
     return page("Admin inbox unavailable", "<p>The admin inbox needs to be configured for production.</p>", 503);
   }
 
-  const supplied = request.headers.get("authorization") ?? "";
-  const expected = "admin:" + password;
-  const credentials = supplied.startsWith("Basic ") ? Buffer.from(supplied.slice(6), "base64").toString("utf8") : "";
-  if (!timingSafeEqual(digest(credentials), digest(expected))) {
-    return page("Sign in", "<p>Enter your RedFlag Atlas admin credentials.</p>", 401,
-      { "WWW-Authenticate": 'Basic realm="RedFlag Atlas Admin", charset="UTF-8"' });
+  const sessionAge = 3600;
+  const cookie = "rfa_admin_session";
+  const signature = (expires) => createHmac("sha256", password)
+    .update("redflag-admin:" + expires).digest("hex");
+  const same = (a, b) => timingSafeEqual(digest(a), digest(b));
+  const redirect = (value, age) => new Response(null, { status: 303, headers: {
+    ...headers, Location: route,
+    "Set-Cookie": `${cookie}=${value}; Max-Age=${age}; Path=${route}; HttpOnly; Secure; SameSite=Strict`,
+  } });
+  const login = (invalid = false) => page("Admin sign in", `<section>
+    ${invalid ? '<p role="alert">Username or password is incorrect.</p>' : ""}
+    <form method="post" action="${route}">
+    <label for="username">Username</label><input id="username" name="username" autocomplete="username" value="admin" required>
+    <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button></form></section>`, invalid ? 401 : 200);
+  const stored = (request.headers.get("cookie") ?? "").split(";")
+    .map((part) => part.trim()).find((part) => part.startsWith(cookie + "="));
+  const [expires, token] = (stored?.slice(cookie.length + 1) ?? "").split(".");
+  const now = Math.floor(Date.now() / 1000);
+  const signedIn = /^\d{10}$/.test(expires) && Number(expires) > now &&
+    Number(expires) <= now + sessionAge && token && same(token, signature(expires));
+
+  if (request.method === "POST") {
+    if (request.headers.get("origin") !== new URL(request.url).origin) {
+      return page("Forbidden", "", 403);
+    }
+    let form;
+    try {
+      if (Number(request.headers.get("content-length")) > 8192) return page("Request too large", "", 413);
+      form = await request.formData();
+    } catch {
+      return login(true);
+    }
+    if (form.get("action") === "logout") return redirect("", 0);
+    const entered = form.get("password");
+    if (form.get("username") !== "admin" || typeof entered !== "string" || !same(entered, password)) {
+      return login(true);
+    }
+    const deadline = now + sessionAge;
+    return redirect(`${deadline}.${signature(deadline)}`, sessionAge);
   }
-  if (request.method !== "GET") return page("Method not allowed", "", 405, { Allow: "GET" });
+  if (request.method !== "GET") return page("Method not allowed", "", 405, { Allow: "GET, POST" });
+  if (!signedIn) return login();
 
   const { searchParams } = new URL(request.url);
   const reference = searchParams.get("ref");
@@ -89,9 +124,9 @@ export default async function adminReports(request, context) {
         .map((ref) => `<li><a href="${route}?ref=${encodeURIComponent(ref)}">${escape(ref)}</a></li>`).join("");
       const newer = current > 1 ? `<a href="${route}?page=${current - 1}">Previous</a> · ` : "";
       const older = current < last ? ` · <a href="${route}?page=${current + 1}">Next</a>` : "";
-      return page("Reports", links ?
+      return page("Reports", `<form method="post" action="${route}"><input type="hidden" name="action" value="logout"><button>Sign out</button></form>` + (links ?
         `<section><p>Choose a report by its submission reference.</p><ul>${links}</ul>
-<p>${newer}Page ${current} of ${last}${older}</p></section>` : "<p>No reports received yet.</p>");
+<p>${newer}Page ${current} of ${last}${older}</p></section>` : "<p>No reports received yet.</p>"));
     }
 
     const blob = await store.get(`${reference}.zip`, { type: "arrayBuffer", consistency: "strong" });
