@@ -167,9 +167,7 @@ function reportForm(countries) {
   const next = document.getElementById("next-step");
   const error = document.getElementById("form-error");
   const success = document.getElementById("form-success");
-  // Netlify injects form-name when it detects this HTML form during deployment.
-  const intakeReady = controls.namedItem("form-name")?.value === form.name;
-  const { email, whatsapp, preferred_contact: preferred, description, incident_date: date } = controls;
+  const { whatsapp, evidence, description, incident_date: date } = controls;
   let step = 0;
   let sending = false;
 
@@ -179,7 +177,6 @@ function reportForm(countries) {
   const today = new Date();
   const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000);
   date.max = localDate.toISOString().slice(0, 10);
-  document.getElementById("preview-notice").hidden = intakeReady;
   document.getElementById("form-loading").hidden = true;
   form.noValidate = true;
   form.hidden = false;
@@ -204,16 +201,20 @@ function reportForm(countries) {
 
   function validate(index) {
     if (index === 0) {
-      email.value = email.value.trim();
       whatsapp.value = whatsapp.value.trim();
       const international = /^\+[1-9]\d{6,14}$/.test(whatsapp.value.replace(/[\s()-]/g, ""));
-      whatsapp.setCustomValidity(whatsapp.value && !international ? "Enter a WhatsApp number with a country code." : "");
-      email.setCustomValidity("");
-      if (!email.value && !whatsapp.value) email.setCustomValidity("Enter an email address or WhatsApp number.");
-      else if (preferred.value === "email" && !email.value) email.setCustomValidity("Enter the email address you want us to use.");
-      else if (preferred.value === "whatsapp" && !whatsapp.value) whatsapp.setCustomValidity("Enter the WhatsApp number you want us to use.");
+      whatsapp.setCustomValidity(international ? "" : "Enter a WhatsApp number with a country code.");
     }
     if (index === 1) {
+      const files = [...evidence.files];
+      let evidenceError = "";
+      if (files.length > 3) evidenceError = "Choose up to 3 attachments.";
+      else if (files.some((file) => !/\.(jpe?g|png|webp|pdf)$/i.test(file.name) || !file.size)) {
+        evidenceError = "Choose non-empty JPG, PNG, WebP or PDF files.";
+      } else if (files.reduce((total, file) => total + file.size, 0) > 4_000_000) {
+        evidenceError = "Attachments must be 4 MB or less combined.";
+      }
+      evidence.setCustomValidity(evidenceError);
       const length = description.value.trim().length;
       description.setCustomValidity(length < 20 ? "Describe what happened in at least 20 characters." : "");
     }
@@ -241,10 +242,6 @@ function reportForm(countries) {
       showStep(step + 1);
       return;
     }
-    if (!intakeReady) {
-      showError("Preview only. No information was sent. Enable form detection and redeploy on Netlify.");
-      return;
-    }
     if (!globalThis.crypto?.randomUUID) {
       showError("Open the secure HTTPS version of the website to send this report.");
       return;
@@ -252,7 +249,7 @@ function reportForm(countries) {
 
     const reference = controls.reference.value || `RFA-${crypto.randomUUID()}`;
     controls.reference.value = reference;
-    const body = new URLSearchParams(new FormData(form));
+    const body = new FormData(form);
     body.set("description", description.value.trim());
     sending = true;
     next.disabled = true;
@@ -261,11 +258,15 @@ function reportForm(countries) {
     try {
       const response = await fetch(form.action, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(30000),
       });
-      if (!response.ok) throw new Error(`Submission returned ${response.status}`);
+      const result = await response.json();
+      if ((response.status === 400 || response.status === 413) && result.error) {
+        showError(result.error);
+        return;
+      }
+      if (!response.ok || result.reference !== reference) throw new Error("Receipt could not be verified");
       form.reset();
       document.getElementById("reference-value").textContent = reference;
       form.hidden = true;
