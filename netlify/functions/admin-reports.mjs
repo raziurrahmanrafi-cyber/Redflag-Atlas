@@ -11,7 +11,7 @@ const headers = {
   "Cache-Control": "private, no-store",
   "X-Content-Type-Options": "nosniff",
   "X-Robots-Tag": "noindex, nofollow",
-  "Referrer-Policy": "no-referrer",
+  "Referrer-Policy": "same-origin",
   "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; sandbox allow-same-origin allow-downloads allow-forms",
 };
 const route = "/admin/reports";
