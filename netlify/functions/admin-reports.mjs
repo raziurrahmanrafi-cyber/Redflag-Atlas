@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { getStore } from "@netlify/blobs";
 import { strFromU8, unzipSync } from "fflate";
 
-export const config = { path: "/admin/reports" };
+export const config = { path: ["/admin/reports", "/api/published-reports"] };
 
 const referencePattern = /^RFA-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const attachmentPattern = /^evidence-[1-9]\d*\.(jpg|png|webp|pdf)$/;
@@ -15,6 +15,7 @@ const headers = {
   "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; sandbox allow-same-origin allow-downloads allow-forms",
 };
 const route = "/admin/reports";
+const publishedStore = "published-incident-reports";
 
 const digest = (value) => createHash("sha256").update(value).digest();
 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) =>
@@ -28,14 +29,14 @@ function page(title, content, status = 200, extraHeaders = {}) {
 body{font:1rem/1.55 system-ui,sans-serif;color:#182335;background:#f3f5f9;margin:0}
 main{max-width:50rem;margin:auto;padding:1.25rem}
 section{background:white;border:1px solid #dde2ec;border-radius:.8rem;padding:1rem;margin:1rem 0}
-label{display:block;font-weight:700}input,button{font:inherit;padding:.65rem;border:1px solid #9ca7b8;border-radius:.35rem}input{box-sizing:border-box;width:100%;margin:.25rem 0 .85rem}button{background:#174591;color:white;cursor:pointer}h1,h2,p{margin-top:0}a{color:#174591;overflow-wrap:anywhere}li{margin:.4rem 0}
+label{display:block;font-weight:700}input,textarea,button{font:inherit;padding:.65rem;border:1px solid #9ca7b8;border-radius:.35rem}input:not([type=checkbox]),textarea{box-sizing:border-box;width:100%;margin:.25rem 0 .85rem}textarea{resize:vertical}button{background:#174591;color:white;cursor:pointer}h1,h2,p{margin-top:0}a{color:#174591;overflow-wrap:anywhere}li{margin:.4rem 0}
 dt{font-weight:700}dd{margin:0 0 .65rem;overflow-wrap:anywhere}
 .description{white-space:pre-wrap;overflow-wrap:anywhere}img{display:block;max-width:100%;max-height:26rem;margin:.6rem 0 1rem}
 </style><main><p>RedFlag Atlas · Private admin inbox</p><h1>${escape(title)}</h1>${content}</main></html>`,
   { status, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", ...extraHeaders } });
 }
 
-function detail(report, reference, files) {
+function detail(report, reference, files, published, draft = {}, error = "") {
   const fields = {
     "Reference": reference, "Received (UTC)": report.receivedAt, "WhatsApp": report.whatsapp,
     "Category": report.category, "Platform": report.platform, "Country": report.country,
@@ -49,12 +50,53 @@ function detail(report, reference, files) {
     const img = name.endsWith(".pdf") ? "" : `<img loading="lazy" src="${url}" alt="${escape(name)}">`;
     return `<li><a href="${url}">${escape(name)}${name.endsWith(".pdf") ? " (download PDF)" : ""}</a>${img}</li>`;
   }).join("");
+  const publication = published
+    ? `<p><strong>Published.</strong> <a href="/explore.html">View public reports</a>.</p>`
+    : `<form method="post" action="${route}?ref=${encodeURIComponent(reference)}">
+      <input type="hidden" name="action" value="publish">
+      ${error ? `<p role="alert">${escape(error)}</p>` : ""}
+      <label for="public-title">Public title</label>
+      <input id="public-title" name="title" value="${escape(draft.title)}" maxlength="100" required>
+      <label for="public-summary">Public summary</label>
+      <textarea id="public-summary" name="summary" rows="3" minlength="20" maxlength="500" required>${escape(draft.summary)}</textarea>
+      <label for="public-description">Public details (optional)</label>
+      <textarea id="public-description" name="description" rows="6" maxlength="4000">${escape(draft.description)}</textarea>
+      <p><label><input type="checkbox" name="reviewed" value="yes" required> I reviewed this wording and removed private information.</label></p>
+      <button type="submit">Publish report</button>
+    </form>`;
   return page("Incident report", `<p><a href="${route}">All reports</a></p>
 <section><dl>${rows}</dl><h2>What happened</h2><p class="description">${escape(report.description)}</p></section>
-<section><h2>Private evidence</h2>${evidence ? `<ul>${evidence}</ul>` : "<p>No evidence attached.</p>"}</section>`);
+<section><h2>Private evidence</h2>${evidence ? `<ul>${evidence}</ul>` : "<p>No evidence attached.</p>"}</section>
+<section><h2>Public report</h2><p>The title, summary, optional details, country, category and platform will appear on the public site.</p>${publication}</section>`, error ? 400 : 200);
+}
+
+function publicFields({ title, summary, description, country, category, platform, publishedOn }) {
+  return { title, summary, description, country, category, platform, publishedOn };
+}
+
+async function publicFeed(request) {
+  const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
+  if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...responseHeaders, Allow: "GET" } });
+  try {
+    const store = getStore({ name: publishedStore, consistency: "strong" });
+    const reports = [];
+    for await (const { blobs } of store.list({ paginate: true })) {
+      for (let index = 0; index < blobs.length; index += 20) {
+        const batch = await Promise.all(blobs.slice(index, index + 20).map(({ key }) => store.get(key, { type: "json" })));
+        reports.push(...batch.filter(Boolean).map(publicFields));
+      }
+    }
+    return Response.json(reports, { headers: responseHeaders });
+  } catch {
+    return Response.json({ error: "Published reports could not be loaded." }, { status: 503, headers: responseHeaders });
+  }
 }
 
 export default async function adminReports(request, context) {
+  const url = new URL(request.url);
+  if (url.pathname === "/api/published-reports") {
+    return context.deploy?.context === "production" ? publicFeed(request) : Response.json([]);
+  }
   const password = process.env.RFA_ADMIN_PASSWORD;
   if (context.deploy?.context !== "production" || !password || password.length < 24) {
     return page("Admin inbox unavailable", "<p>The admin inbox needs to be configured for production.</p>", 503);
@@ -71,6 +113,7 @@ export default async function adminReports(request, context) {
   } });
   const { searchParams } = new URL(request.url);
   const reference = searchParams.get("ref");
+  const attachment = searchParams.get("file");
   const target = referencePattern.test(reference) ? `${route}?ref=${encodeURIComponent(reference)}` : route;
   const login = (invalid = false) => page("Admin sign in", `<section>
     ${invalid ? '<p role="alert">Username or password is incorrect.</p>' : ""}
@@ -85,29 +128,36 @@ export default async function adminReports(request, context) {
   const signedIn = /^\d{10}$/.test(expires) && Number(expires) > now &&
     Number(expires) <= now + sessionAge && token && same(token, signature(expires));
 
+  let publicationForm;
   if (request.method === "POST") {
-    if (request.headers.get("origin") !== new URL(request.url).origin) {
+    if (request.headers.get("origin") !== url.origin) {
       return page("Forbidden", "", 403);
     }
     let form;
     try {
-      if (Number(request.headers.get("content-length")) > 8192) return page("Request too large", "", 413);
+      if (Number(request.headers.get("content-length")) > 60_000) return page("Request too large", "", 413);
       form = await request.formData();
     } catch {
       return login(true);
     }
-    if (form.get("action") === "logout") return redirect("", 0);
-    const entered = form.get("password");
-    if (form.get("username") !== "admin" || typeof entered !== "string" || !same(entered, password)) {
-      return login(true);
+    const action = form.get("action");
+    if (action === "publish") {
+      if (!signedIn) return login(true);
+      if (!referencePattern.test(reference) || attachment) return page("Report not found", "", 404);
+      publicationForm = form;
+    } else {
+      if (action === "logout") return redirect("", 0);
+      const entered = form.get("password");
+      if (form.get("username") !== "admin" || typeof entered !== "string" || !same(entered, password)) {
+        return login(true);
+      }
+      const deadline = now + sessionAge;
+      return redirect(`${deadline}.${signature(deadline)}`, sessionAge, target);
     }
-    const deadline = now + sessionAge;
-    return redirect(`${deadline}.${signature(deadline)}`, sessionAge, target);
   }
-  if (request.method !== "GET") return page("Method not allowed", "", 405, { Allow: "GET, POST" });
+  if (request.method !== "GET" && !publicationForm) return page("Method not allowed", "", 405, { Allow: "GET, POST" });
   if (!signedIn) return login();
 
-  const attachment = searchParams.get("file");
   if ((reference !== null && !referencePattern.test(reference)) ||
       (attachment !== null && (!reference || !attachmentPattern.test(attachment)))) {
     return page("Report not found", "", 404);
@@ -144,7 +194,28 @@ export default async function adminReports(request, context) {
       } });
     }
     const report = JSON.parse(strFromU8(entry));
-    return detail(report, reference, (report.attachments ?? []).filter((name) => attachmentPattern.test(name)));
+    const files = (report.attachments ?? []).filter((name) => attachmentPattern.test(name));
+    const publications = getStore({ name: publishedStore, consistency: "strong" });
+    const published = Boolean(await publications.getMetadata(reference));
+    if (!publicationForm || published) return detail(report, reference, files, published);
+
+    const field = (key) => String(publicationForm.get(key) ?? "").trim();
+    const draft = { title: field("title"), summary: field("summary"), description: field("description") };
+    if (!draft.title || draft.title.length > 100 || draft.summary.length < 20 || draft.summary.length > 500 ||
+        draft.description.length > 4000 || field("reviewed") !== "yes") {
+      return detail(report, reference, files, false, draft, "Check the title and summary length and confirm your review.");
+    }
+    const contact = String(report.whatsapp ?? "").replace(/\D/g, "");
+    const includesContact = contact.length >= 7 && Object.values(draft).some((value) =>
+      value.replace(/[\s()+-]/g, "").includes(contact));
+    if (includesContact) {
+      return detail(report, reference, files, false, draft, "Remove the submitter’s WhatsApp number from the public text.");
+    }
+    await publications.setJSON(reference, publicFields({
+      ...draft, country: report.country, category: report.category, platform: report.platform,
+      publishedOn: new Date().toISOString().slice(0, 10),
+    }), { onlyIfNew: true });
+    return new Response(null, { status: 303, headers: { ...headers, Location: target } });
   } catch {
     return page("Could not load reports", "<p>Please reload and try again.</p>", 503);
   }
