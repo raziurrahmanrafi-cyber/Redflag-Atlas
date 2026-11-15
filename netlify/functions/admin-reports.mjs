@@ -65,13 +65,16 @@ export default async function adminReports(request, context) {
   const signature = (expires) => createHmac("sha256", password)
     .update("redflag-admin:" + expires).digest("hex");
   const same = (a, b) => timingSafeEqual(digest(a), digest(b));
-  const redirect = (value, age) => new Response(null, { status: 303, headers: {
-    ...headers, Location: route,
+  const redirect = (value, age, target = route) => new Response(null, { status: 303, headers: {
+    ...headers, Location: target,
     "Set-Cookie": `${cookie}=${value}; Max-Age=${age}; Path=${route}; HttpOnly; Secure; SameSite=Strict`,
   } });
+  const { searchParams } = new URL(request.url);
+  const reference = searchParams.get("ref");
+  const target = referencePattern.test(reference) ? `${route}?ref=${encodeURIComponent(reference)}` : route;
   const login = (invalid = false) => page("Admin sign in", `<section>
     ${invalid ? '<p role="alert">Username or password is incorrect.</p>' : ""}
-    <form method="post" action="${route}">
+    <form method="post" action="${target}">
     <label for="username">Username</label><input id="username" name="username" autocomplete="username" value="admin" required>
     <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
     <button type="submit">Sign in</button></form></section>`, invalid ? 401 : 200);
@@ -99,13 +102,11 @@ export default async function adminReports(request, context) {
       return login(true);
     }
     const deadline = now + sessionAge;
-    return redirect(`${deadline}.${signature(deadline)}`, sessionAge);
+    return redirect(`${deadline}.${signature(deadline)}`, sessionAge, target);
   }
   if (request.method !== "GET") return page("Method not allowed", "", 405, { Allow: "GET, POST" });
   if (!signedIn) return login();
 
-  const { searchParams } = new URL(request.url);
-  const reference = searchParams.get("ref");
   const attachment = searchParams.get("file");
   if ((reference !== null && !referencePattern.test(reference)) ||
       (attachment !== null && (!reference || !attachmentPattern.test(attachment)))) {
