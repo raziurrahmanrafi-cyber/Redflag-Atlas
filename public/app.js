@@ -13,6 +13,14 @@ async function getJson(path) {
   return response.json();
 }
 
+async function loadReports() {
+  const [archived, published] = await Promise.all([
+    getJson("./assets/reports.json"),
+    getJson("/api/published-reports").catch(() => []),
+  ]);
+  return [...archived, ...published];
+}
+
 function addOptions(select, entries) {
   for (const [value, label] of entries) select.add(new Option(label, value));
 }
@@ -104,7 +112,7 @@ function explore(reports, countries) {
   const target = document.getElementById("feed");
   const fields = ["q", "country", "category", "platform"];
   const params = new URLSearchParams(location.search);
-  addOptions(form.elements.country, countryOptions(countries));
+  const countrySearch = enableCountrySearch(form.elements.country, countries);
   addOptions(form.elements.category, categories.map((value) => [value, value]));
   addOptions(form.elements.platform, platforms.map((value) => [value, value]));
   for (const field of fields) {
@@ -122,7 +130,7 @@ function explore(reports, countries) {
         report.title, report.summary, report.description, report.publicAlias,
         report.publicHandle, report.category, report.platform, countries[report.country],
       ].join(" ").toLocaleLowerCase();
-      return (!country || report.country === country)
+      return (country ? report.country === country : countrySearch.matches(report.country))
         && (!category || report.category === category)
         && (!platform || report.platform === platform)
         && tokens.every((token) => searchable.includes(token));
@@ -148,14 +156,57 @@ function explore(reports, countries) {
   form.addEventListener("input", render);
   document.getElementById("clear-filters").addEventListener("click", () => {
     form.reset();
+    countrySearch.reset();
     render();
     form.elements.q.focus();
   });
   render();
 }
 
-function countryOptions(countries) {
-  return Object.entries(countries).sort((first, second) => first[1].localeCompare(second[1], "en"));
+function enableCountrySearch(select, countries) {
+  const options = Object.entries(countries).sort((first, second) => first[1].localeCompare(second[1], "en"));
+  const normalize = (value) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+  const selectLabel = select.closest("label");
+  const container = element("div", "", "country-picker");
+  const search = element("input", "");
+  search.type = "search";
+  search.placeholder = "Type a country name";
+  search.setAttribute("aria-label", "Search countries");
+  search.setAttribute("aria-controls", select.id);
+  search.autocomplete = "off";
+  const status = element("small", "", "country-search-status");
+  status.setAttribute("role", "status");
+  selectLabel.before(container);
+  container.append(search, selectLabel, status);
+  const placeholder = select.options[0].cloneNode(true);
+  const matches = (code) => {
+    const query = normalize(search.value);
+    return !query || normalize(countries[code]).includes(query) || code.toLowerCase() === query;
+  };
+  const update = () => {
+    const previous = select.value;
+    const filtered = options.filter(([code]) => matches(code));
+    const placeholderOption = placeholder.cloneNode(true);
+    if (!filtered.length) placeholderOption.textContent = "No matching countries";
+    select.replaceChildren(placeholderOption);
+    addOptions(select, filtered);
+    const exact = filtered.find(([code, name]) =>
+      [code.toLowerCase(), normalize(name)].includes(normalize(search.value)));
+    select.value = exact?.[0] ?? (filtered.some(([code]) => code === previous) ? previous : "");
+    status.textContent = search.value.trim() ? `${filtered.length} matching countries` : "";
+  };
+  search.addEventListener("input", () => {
+    select.value = "";
+    update();
+  });
+  search.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === "ArrowDown") {
+      event.preventDefault();
+      select.focus();
+    }
+  });
+  update();
+  return { matches, reset: update };
 }
 
 function reportForm(countries) {
@@ -171,7 +222,7 @@ function reportForm(countries) {
   let step = 0;
   let sending = false;
 
-  addOptions(controls.country, countryOptions(countries));
+  enableCountrySearch(controls.country, countries);
   addOptions(controls.category, categories.map((value) => [value, value]));
   addOptions(controls.platform, platforms.map((value) => [value, value]));
   const today = new Date();
@@ -289,7 +340,7 @@ try {
   else {
     const [countries, records] = await Promise.all([
       getJson("./assets/countries.json"),
-      getJson("./assets/reports.json"),
+      loadReports(),
     ]);
     const reports = publicReports(records, countries);
     if (page === "home") home(reports, countries);
