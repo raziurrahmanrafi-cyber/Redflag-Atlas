@@ -1,9 +1,8 @@
 import { getStore } from "@netlify/blobs";
 import { strToU8, zipSync } from "fflate";
+import { mirrorReport, readStoredReport, referencePattern, reportStoreName } from "../dashboard-reports.mjs";
 
-const storeName = "private-incident-reports";
 const maxEvidenceBytes = 4_000_000;
-const referencePattern = /^RFA-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const consents = ["accuracy", "review", "contact_consent", "guidelines_agreement"];
 
 function respond(status, data) {
@@ -96,8 +95,14 @@ export default async function submitReport(request, context) {
 
   // One conditional write keeps the report and its files together and makes retries safe.
   try {
+    const store = getStore({ name: reportStoreName, consistency: "strong" });
     const archive = zipSync({ "report.json": strToU8(JSON.stringify(report, null, 2)), ...attachments }, { level: 0 });
-    await getStore(storeName).set(`${reference}.zip`, archive, { onlyIfNew: true });
+    const { modified } = await store.set(`${reference}.zip`, archive, { onlyIfNew: true });
+    try {
+      await mirrorReport(reference, () => modified ? report : readStoredReport(store, reference));
+    } catch {
+      console.error("Could not sync a report to Netlify Forms; the archive was saved");
+    }
     return respond(201, { reference });
   } catch {
     return respond(503, { error: "The report could not be saved. Please try again." });
